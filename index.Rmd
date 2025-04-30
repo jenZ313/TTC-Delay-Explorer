@@ -68,8 +68,6 @@ delays_cleaned <- read_csv("data/transit_data_cleaned.csv") %>%
  - What are the most common delay causes?  
  - Can we predict future delays using past records or external events?
  
-# Interactive Plots
-
 
 ```{r plots , message=FALSE, echo=FALSE, warning=FALSE}
 
@@ -216,7 +214,7 @@ p4 <- fig %>% layout(
 
 ```
 
-## Interactive Visualizations {.tabset}
+# Interactive Visualizations {.tabset}
 
 ### Delay Trends Over Time
 
