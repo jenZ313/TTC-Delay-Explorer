@@ -48,7 +48,7 @@ delays_cleaned <- read_csv("data/transit_data_cleaned.csv") %>%
  This site explores how delays affect Toronto’s public transit system using ten years of TTC delay data from 2014 to 2024.  
  Through a mix of analysis and interactive visualizations, the project reveals when, where, and why delays occur—and what patterns emerge across time and modes.
 
- This site contains four main sections:
+ This site contains 3 main sections:
  
  - **Overview** (this page): Project introduction, background, interative plots and data summary 
  - **Midterm EDA**: Initial exploratory data analysis and visual insights  
