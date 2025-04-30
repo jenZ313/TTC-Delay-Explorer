@@ -58,7 +58,10 @@ delays_cleaned <- read_csv("data/transit_data_cleaned.csv") %>%
 
 # Data
 
- - The dataset used in this project was sourced from Toronto’s Open Data Portal, covering delay events for buses, streetcars, and subways. To simplify and standardize the data, raw files were cleaned and processed using custom R scripts available in the `data/` folder of this project. These scripts handle issues such as inconsistent date formats, missing values, and delay type mappings. While this site uses a cleaned CSV for faster access, the full pipeline is reproducible and can be rerun using the original TTC data and the provided scripts.
+- The dataset used in this project was sourced from Toronto’s Open Data Portal and includes delay records for buses, streetcars, and subways. To simplify and standardize the data, all raw files were cleaned using the script `clean_data.Rmd` located in the `data` folder. This script addresses issues such as inconsistent date formats, missing values, and delay type codes.
+
+- While the midterm report performs similar cleaning steps, `clean_data.Rmd` additionally saves the cleaned result as a CSV file for easy reuse in the final report. The midterm report itself can be run directly without additional setup, as it retrieves streetcar and subway data through the TTC API. The necessary code for processing bus delays and mapping delay types is also provided in the `data` folder for full reproducibility.
+
 
 #  Key Questions Explored
 

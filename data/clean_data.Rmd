@@ -1,0 +1,335 @@
+---
+title: "clean_data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE)
+library(opendatatoronto)
+library(dplyr)
+library(purrr)
+library(ggplot2)
+library(lubridate)
+library(forcats) 
+library(readxl)
+library(viridis)
+library(MetBrewer)
+library(ggrepel)
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(patchwork)  
+library(wordcloud2)
+library(DT)
+library(gridExtra)
+library(ggwordcloud)
+
+
+
+```
+
+```{r}
+
+dataset_id <- "996cfe8d-fb35-40ce-b569-698d51fc683b"
+
+years_bind <- 2018:2021
+years_no_bind <- 2022:2024
+
+subway_early <- map(years_bind, ~{
+  list_package_resources(dataset_id) %>%
+    filter(name == paste0("ttc-subway-delay-data-", .x)) %>%
+    get_resource() %>%
+    bind_rows()
+})  
+
+
+subway_later <- map(years_no_bind, ~{
+  list_package_resources(dataset_id) %>%
+    filter(name == paste0("ttc-subway-delay-data-", .x)) %>%
+    get_resource()
+})
+
+
+subway_data <- list(subway_early, subway_later) %>%
+  flatten()  
+
+
+subway <- bind_rows(subway_data)
+
+dataset_id <- "b68cb71b-44a7-4394-97e2-5d2f41462a5d"
+
+years_bind <- 2014:2019
+
+
+streetcar_early <- map(years_bind, ~{
+  list_package_resources(dataset_id) %>%
+    filter(name == paste0("ttc-streetcar-delay-data-", .x)) %>%
+    get_resource() %>%
+    bind_rows()
+})  %>%
+  bind_rows()
+  
+
+
+streetcar2020 <- list_package_resources(dataset_id) %>%
+  filter(name == "ttc-streetcar-delay-data-2020") %>%
+  get_resource() 
+
+street2020_list_clean <- lapply(streetcar2020, function(df) {
+  df <- as.data.frame(df)  
+  
+  if ("Time" %in% names(df)) {
+    df$Time <- ifelse(inherits(df$Time, "POSIXct"), 
+                      format(df$Time, "%H:%M"),  
+                      as.character(df$Time))  
+  }
+  
+  df
+})
+
+streetcar2020 <- bind_rows(street2020_list_clean)
+
+
+
+streetcar2021 <- list_package_resources(dataset_id) %>%
+  filter(name == "ttc-streetcar-delay-data-2021") %>%
+  get_resource()
+
+street2021_list_clean <- lapply(streetcar2021, function(df) {
+  df <- as.data.frame(df)
+   if ("Line" %in% names(df)) {
+    df$Line <- as.character(df$Line)
+  }
+  
+  df
+})
+
+streetcar2021 <- bind_rows(street2021_list_clean)
+
+
+
+
+
+streetcar2022 <- list_package_resources(dataset_id) %>%
+  filter(name == "ttc-streetcar-delay-data-2022") %>%
+  get_resource()
+
+street2022_list_clean <- lapply(streetcar2022, function(df) {
+  df <- as.data.frame(df)
+
+   if ("Line" %in% names(df)) {
+    df$Line <- as.character(df$Line)
+  }
+  
+  df
+})
+
+streetcar2023 <- list_package_resources(dataset_id) %>%
+  filter(name == "ttc-streetcar-delay-data-2023") %>%
+  get_resource()
+
+street2023_list_clean <- lapply(streetcar2023, function(df) {
+  df <- as.data.frame(df)
+  if ("Line" %in% names(df)) {
+    df$Line <- as.character(df$Line)
+  }
+  
+  df
+})
+
+streetcar2024 <- list_package_resources(dataset_id) %>%
+  filter(name == "ttc-streetcar-delay-data-2024") %>%
+  get_resource()
+
+street2024_list_clean <- lapply(streetcar2024, function(df) {
+  df <- as.data.frame(df)
+   if ("Line" %in% names(df)) {
+    df$Line <- as.character(df$Line)
+  }
+  
+  df
+})
+
+
+
+streetcar_data <- list(
+  streetcar_early, 
+  streetcar2024, 
+  streetcar2023, 
+  streetcar2022, 
+  streetcar2021,
+  streetcar2020
+)
+
+fix_date_time_col <- function(x) {
+  if (is.numeric(x)) {
+    return(as.POSIXct(as.Date(x, origin = "1899-12-30"), tz = "UTC"))
+  } else {
+    if (!inherits(x, "POSIXct")) {
+      return(as.POSIXct(x, tz = "UTC"))
+    }
+  }
+  return(x)
+}
+fix_time_format <- function(df) {
+  if ("Date" %in% names(df) && "Report Date" %in% names(df)) {
+    df$Date <- fix_date_time_col(df$Date)
+    df$`Report Date` <- fix_date_time_col(df$`Report Date`)
+    df$Date <- coalesce(df$Date, df$`Report Date`)
+  } else if ("Date" %in% names(df)) {
+    df$Date <- fix_date_time_col(df$Date)
+  } else if ("Report Date" %in% names(df)) {
+    df$Date <- fix_date_time_col(df$`Report Date`)
+  }
+    if ("Line" %in% names(df)) {
+    df$Line <- as.character(df$Line)
+    }
+  
+  if ("Time" %in% names(df)) {
+    df$Time <- sapply(df$Time, function(t) {
+      t <- as.character(t)
+      
+      if (grepl("^1899-12-31", t)) {
+        parsed <- as.POSIXct(t, tz = "UTC", format = "%Y-%m-%d %H:%M:%S")
+        return(format(parsed, "%H:%M"))
+      }
+      else if (grepl("^\\d{2}:\\d{2}$", t)) {
+        return(t)
+      }
+      else {
+        parsed <- as.POSIXct(t, tz = "UTC", format = "%Y-%m-%d %H:%M:%S")
+        if (is.na(parsed)) {
+          return(t)
+        } else {
+          return(format(parsed, "%H:%M"))
+        }
+      }
+    })
+  }
+  return(df)
+}
+
+streetcar_data_fixed <- lapply(streetcar_data, fix_time_format)
+
+streetcar <- bind_rows(streetcar_data_fixed)
+
+
+
+
+
+
+
+
+file_dir <- "./" 
+
+file_list <- list.files(path = file_dir, pattern = "ttc-bus-delay-data-.*\\.xlsx$", full.names = TRUE)
+
+
+bus_data_list <- lapply(file_list, function(file) {
+  df <- read_excel(file)
+  
+  if ("Time" %in% names(df)) {
+    df$Time <- as.character(df$Time) 
+    
+    df$Time <- sapply(df$Time, function(t) {
+      if (grepl("^1899-12-31", t)) {
+        return(format(as.POSIXct(t, tz = "UTC", format = "%Y-%m-%d %H:%M:%S"), "%H:%M"))
+      }
+
+        return(t)
+
+    })
+    
+    df$Time <- as.character(df$Time)  
+  }
+
+  if ("Route" %in% names(df)) {
+    df$Route <- as.character(df$Route)
+  }
+  
+  return(df)
+})
+
+
+
+```
+
+
+```{r, message=FALSE}
+
+subway <- bind_rows(subway_data)
+bus <- bind_rows(bus_data_list)
+streetcar <- bind_rows(streetcar_data_fixed)
+
+subway <- subway %>%
+  mutate(DateTime = as.POSIXct(paste(Date, Time), format = "%Y-%m-%d %H:%M", tz = "UTC"),
+         Route = Line,
+         Location = Station,
+         Incident = Code)
+
+
+
+streetcar <- streetcar %>%
+  mutate(DateTime = as.POSIXct(paste(coalesce(Date, `Report Date`), Time),
+                               format = "%Y-%m-%d %H:%M", tz = "UTC"),
+         `Min Delay` = coalesce(`Min Delay`, Delay),
+         `Min Gap` = coalesce(`Min Gap`, Gap),
+         `Route` = as.character(Route),
+         `Route` = coalesce(`Route`, Line),
+         `Line` = `Route`)
+
+bus <- bus %>%
+  mutate(DateTime = as.POSIXct(paste(coalesce(Date, `Report Date`), Time),
+                               format = "%Y-%m-%d %H:%M", tz = "UTC"),
+         `Min Delay` = coalesce(`Min Delay`, Delay),
+         `Min Gap` = coalesce(`Min Gap`, Gap))
+
+
+
+
+subway <- subway %>%
+  select(Day, Location, Incident, `Min Delay`, `Min Gap`, DateTime, Route)  
+
+bus <- bus %>%
+  select(Day, Location, Incident, `Min Delay`, `Min Gap`, DateTime, Route)  
+
+streetcar <- streetcar %>%
+  select(Day, Location, Incident, `Min Delay`, `Min Gap`, DateTime, Route)  
+
+
+
+transit_data <- bind_rows(
+  subway %>% mutate(Source = "Subway"),
+  bus %>% mutate(Source = "Bus"),
+  streetcar %>% mutate(Source = "Streetcar")
+)
+
+transit_data <- transit_data %>%
+  filter(!is.na(`Min Delay`) & !is.na(`Min Gap`) & 
+         !is.na(DateTime) & !is.na(Route) & !is.na(Incident) &
+         `Min Delay` > 0 & !is.na(Location))
+
+delay_codes <- read_excel("ttc-subway-delay-codes.xlsx")
+
+delay_codes <- delay_codes %>%
+  rename(Incident_Code = `SUB RMENU CODE`, Incident_Description = `CODE DESCRIPTION...3`)
+
+transit_data <- transit_data %>%
+  mutate(Incident = ifelse(Source == "Subway", 
+                           coalesce(delay_codes$Incident_Description[match(Incident, delay_codes$Incident_Code)], Incident), 
+                           Incident))
+
+
+
+delay_codes <- delay_codes %>%
+  rename(Incident_Code1 = `SRT RMENU CODE`, Incident_Description1 = `CODE DESCRIPTION...7`)
+
+transit_data <- transit_data %>%
+  mutate(Incident = ifelse(Source == "Subway", 
+                           coalesce(delay_codes$Incident_Description1[match(Incident, delay_codes$Incident_Code1)], Incident), 
+                           Incident))
+
+
+write.csv(transit_data, "transit_data_cleaned.csv", row.names = FALSE)
+
+```

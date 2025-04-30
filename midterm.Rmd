@@ -224,7 +224,7 @@ streetcar <- bind_rows(streetcar_data_fixed)
 
 
 
-file_dir <- "./" 
+file_dir <- "data/" 
 
 file_list <- list.files(path = file_dir, pattern = "ttc-bus-delay-data-.*\\.xlsx$", full.names = TRUE)
 
@@ -313,7 +313,7 @@ transit_data <- transit_data %>%
          !is.na(DateTime) & !is.na(Route) & !is.na(Incident) &
          `Min Delay` > 0 & !is.na(Location))
 
-delay_codes <- read_excel("ttc-subway-delay-codes.xlsx")
+delay_codes <- read_excel("data/ttc-subway-delay-codes.xlsx")
 
 delay_codes <- delay_codes %>%
   rename(Incident_Code = `SUB RMENU CODE`, Incident_Description = `CODE DESCRIPTION...3`)
