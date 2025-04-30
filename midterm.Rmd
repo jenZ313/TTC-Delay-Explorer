@@ -1,0 +1,734 @@
+---
+title: "Midterm EDA"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE)
+library(opendatatoronto)
+library(dplyr)
+library(purrr)
+library(ggplot2)
+library(lubridate)
+library(forcats) 
+library(readxl)
+library(viridis)
+library(MetBrewer)
+library(ggrepel)
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(patchwork)  
+library(wordcloud2)
+library(DT)
+library(gridExtra)
+library(ggwordcloud)
+
+
+
+```
+
+```{r}
+
+dataset_id <- "996cfe8d-fb35-40ce-b569-698d51fc683b"
+
+years_bind <- 2018:2021
+years_no_bind <- 2022:2024
+
+subway_early <- map(years_bind, ~{
+  list_package_resources(dataset_id) %>%
+    filter(name == paste0("ttc-subway-delay-data-", .x)) %>%
+    get_resource() %>%
+    bind_rows()
+})  
+
+
+subway_later <- map(years_no_bind, ~{
+  list_package_resources(dataset_id) %>%
+    filter(name == paste0("ttc-subway-delay-data-", .x)) %>%
+    get_resource()
+})
+
+
+subway_data <- list(subway_early, subway_later) %>%
+  flatten()  
+
+
+subway <- bind_rows(subway_data)
+
+dataset_id <- "b68cb71b-44a7-4394-97e2-5d2f41462a5d"
+
+years_bind <- 2014:2019
+
+
+streetcar_early <- map(years_bind, ~{
+  list_package_resources(dataset_id) %>%
+    filter(name == paste0("ttc-streetcar-delay-data-", .x)) %>%
+    get_resource() %>%
+    bind_rows()
+})  %>%
+  bind_rows()
+  
+
+
+streetcar2020 <- list_package_resources(dataset_id) %>%
+  filter(name == "ttc-streetcar-delay-data-2020") %>%
+  get_resource() 
+
+street2020_list_clean <- lapply(streetcar2020, function(df) {
+  df <- as.data.frame(df)  
+  
+  if ("Time" %in% names(df)) {
+    df$Time <- ifelse(inherits(df$Time, "POSIXct"), 
+                      format(df$Time, "%H:%M"),  
+                      as.character(df$Time))  
+  }
+  
+  df
+})
+
+streetcar2020 <- bind_rows(street2020_list_clean)
+
+
+
+streetcar2021 <- list_package_resources(dataset_id) %>%
+  filter(name == "ttc-streetcar-delay-data-2021") %>%
+  get_resource()
+
+street2021_list_clean <- lapply(streetcar2021, function(df) {
+  df <- as.data.frame(df)
+   if ("Line" %in% names(df)) {
+    df$Line <- as.character(df$Line)
+  }
+  
+  df
+})
+
+streetcar2021 <- bind_rows(street2021_list_clean)
+
+
+
+
+
+streetcar2022 <- list_package_resources(dataset_id) %>%
+  filter(name == "ttc-streetcar-delay-data-2022") %>%
+  get_resource()
+
+street2022_list_clean <- lapply(streetcar2022, function(df) {
+  df <- as.data.frame(df)
+
+   if ("Line" %in% names(df)) {
+    df$Line <- as.character(df$Line)
+  }
+  
+  df
+})
+
+streetcar2023 <- list_package_resources(dataset_id) %>%
+  filter(name == "ttc-streetcar-delay-data-2023") %>%
+  get_resource()
+
+street2023_list_clean <- lapply(streetcar2023, function(df) {
+  df <- as.data.frame(df)
+  if ("Line" %in% names(df)) {
+    df$Line <- as.character(df$Line)
+  }
+  
+  df
+})
+
+streetcar2024 <- list_package_resources(dataset_id) %>%
+  filter(name == "ttc-streetcar-delay-data-2024") %>%
+  get_resource()
+
+street2024_list_clean <- lapply(streetcar2024, function(df) {
+  df <- as.data.frame(df)
+   if ("Line" %in% names(df)) {
+    df$Line <- as.character(df$Line)
+  }
+  
+  df
+})
+
+
+
+streetcar_data <- list(
+  streetcar_early, 
+  streetcar2024, 
+  streetcar2023, 
+  streetcar2022, 
+  streetcar2021,
+  streetcar2020
+)
+
+fix_date_time_col <- function(x) {
+  if (is.numeric(x)) {
+    return(as.POSIXct(as.Date(x, origin = "1899-12-30"), tz = "UTC"))
+  } else {
+    if (!inherits(x, "POSIXct")) {
+      return(as.POSIXct(x, tz = "UTC"))
+    }
+  }
+  return(x)
+}
+fix_time_format <- function(df) {
+  if ("Date" %in% names(df) && "Report Date" %in% names(df)) {
+    df$Date <- fix_date_time_col(df$Date)
+    df$`Report Date` <- fix_date_time_col(df$`Report Date`)
+    df$Date <- coalesce(df$Date, df$`Report Date`)
+  } else if ("Date" %in% names(df)) {
+    df$Date <- fix_date_time_col(df$Date)
+  } else if ("Report Date" %in% names(df)) {
+    df$Date <- fix_date_time_col(df$`Report Date`)
+  }
+    if ("Line" %in% names(df)) {
+    df$Line <- as.character(df$Line)
+    }
+  
+  if ("Time" %in% names(df)) {
+    df$Time <- sapply(df$Time, function(t) {
+      t <- as.character(t)
+      
+      if (grepl("^1899-12-31", t)) {
+        parsed <- as.POSIXct(t, tz = "UTC", format = "%Y-%m-%d %H:%M:%S")
+        return(format(parsed, "%H:%M"))
+      }
+      else if (grepl("^\\d{2}:\\d{2}$", t)) {
+        return(t)
+      }
+      else {
+        parsed <- as.POSIXct(t, tz = "UTC", format = "%Y-%m-%d %H:%M:%S")
+        if (is.na(parsed)) {
+          return(t)
+        } else {
+          return(format(parsed, "%H:%M"))
+        }
+      }
+    })
+  }
+  return(df)
+}
+
+streetcar_data_fixed <- lapply(streetcar_data, fix_time_format)
+
+streetcar <- bind_rows(streetcar_data_fixed)
+
+
+
+
+
+
+
+
+file_dir <- "./" 
+
+file_list <- list.files(path = file_dir, pattern = "ttc-bus-delay-data-.*\\.xlsx$", full.names = TRUE)
+
+
+bus_data_list <- lapply(file_list, function(file) {
+  df <- read_excel(file)
+  
+  if ("Time" %in% names(df)) {
+    df$Time <- as.character(df$Time) 
+    
+    df$Time <- sapply(df$Time, function(t) {
+      if (grepl("^1899-12-31", t)) {
+        return(format(as.POSIXct(t, tz = "UTC", format = "%Y-%m-%d %H:%M:%S"), "%H:%M"))
+      }
+
+        return(t)
+
+    })
+    
+    df$Time <- as.character(df$Time)  
+  }
+
+  if ("Route" %in% names(df)) {
+    df$Route <- as.character(df$Route)
+  }
+  
+  return(df)
+})
+
+
+
+```
+
+
+```{r, message=FALSE}
+
+subway <- bind_rows(subway_data)
+bus <- bind_rows(bus_data_list)
+streetcar <- bind_rows(streetcar_data_fixed)
+
+subway <- subway %>%
+  mutate(DateTime = as.POSIXct(paste(Date, Time), format = "%Y-%m-%d %H:%M", tz = "UTC"),
+         Route = Line,
+         Location = Station,
+         Incident = Code)
+
+
+
+streetcar <- streetcar %>%
+  mutate(DateTime = as.POSIXct(paste(coalesce(Date, `Report Date`), Time),
+                               format = "%Y-%m-%d %H:%M", tz = "UTC"),
+         `Min Delay` = coalesce(`Min Delay`, Delay),
+         `Min Gap` = coalesce(`Min Gap`, Gap),
+         `Route` = as.character(Route),
+         `Route` = coalesce(`Route`, Line),
+         `Line` = `Route`)
+
+bus <- bus %>%
+  mutate(DateTime = as.POSIXct(paste(coalesce(Date, `Report Date`), Time),
+                               format = "%Y-%m-%d %H:%M", tz = "UTC"),
+         `Min Delay` = coalesce(`Min Delay`, Delay),
+         `Min Gap` = coalesce(`Min Gap`, Gap))
+
+
+
+
+subway <- subway %>%
+  select(Day, Location, Incident, `Min Delay`, `Min Gap`, DateTime, Route)  
+
+bus <- bus %>%
+  select(Day, Location, Incident, `Min Delay`, `Min Gap`, DateTime, Route)  
+
+streetcar <- streetcar %>%
+  select(Day, Location, Incident, `Min Delay`, `Min Gap`, DateTime, Route)  
+
+
+
+transit_data <- bind_rows(
+  subway %>% mutate(Source = "Subway"),
+  bus %>% mutate(Source = "Bus"),
+  streetcar %>% mutate(Source = "Streetcar")
+)
+
+transit_data <- transit_data %>%
+  filter(!is.na(`Min Delay`) & !is.na(`Min Gap`) & 
+         !is.na(DateTime) & !is.na(Route) & !is.na(Incident) &
+         `Min Delay` > 0 & !is.na(Location))
+
+delay_codes <- read_excel("ttc-subway-delay-codes.xlsx")
+
+delay_codes <- delay_codes %>%
+  rename(Incident_Code = `SUB RMENU CODE`, Incident_Description = `CODE DESCRIPTION...3`)
+
+transit_data <- transit_data %>%
+  mutate(Incident = ifelse(Source == "Subway", 
+                           coalesce(delay_codes$Incident_Description[match(Incident, delay_codes$Incident_Code)], Incident), 
+                           Incident))
+
+
+
+delay_codes <- delay_codes %>%
+  rename(Incident_Code1 = `SRT RMENU CODE`, Incident_Description1 = `CODE DESCRIPTION...7`)
+
+transit_data <- transit_data %>%
+  mutate(Incident = ifelse(Source == "Subway", 
+                           coalesce(delay_codes$Incident_Description1[match(Incident, delay_codes$Incident_Code1)], Incident), 
+                           Incident))
+
+
+# write.csv(transit_data, "transit_data_cleaned.csv", row.names = FALSE)
+
+```
+
+
+
+# Introduction
+
+It is early in the morning. You woke up an hour earlier than usual to ensure you had plenty of time to get to your important presentation. You check the transit schedule, and everything appears to be running as expected. However, as you arrive at the subway station, something feels off. The platform is unusually crowded, and the electronic display has not updated in a while. You check your phone and realize that time is slipping away. The subway that was scheduled to arrive 30 minutes ago is still nowhere in sight.
+
+Public transit delays are an ongoing challenge for commuters worldwide, causing disruptions to daily schedules, reducing productivity, and eroding confidence in transportation systems. In a city like Toronto, where thousands rely on subways, buses, and streetcars for mobility, these delays can have significant ripple effects on both individual routines and the broader transit network. Understanding the underlying causes of these disruptions is crucial for improving transit efficiency and reliability.
+
+This study examines the factors contributing to transit delays across Toronto’s public transportation system, focusing on differences by mode, time of day, and delay duration. By analyzing historical delay data from the TTC’s subway, streetcar, and bus services, this research identifies common causes of service disruptions and explores how these patterns vary. Using statistical analysis and exploratory data visualization, the study provides insights into transit performance and lays the groundwork for future predictive modeling efforts aimed at mitigating delays and enhancing service dependability.
+
+
+
+# Methods
+
+```{r, eval=FALSE}
+dim(transit_data)
+colSums(is.na(transit_data))
+table(transit_data$Source)
+head(transit_data)
+tail(transit_data)
+```
+
+
+### Data
+
+This study utilizes transit delay data from subway, streetcar, and bus services operated by the TTC, sourced from the Toronto Open Data Portal. The dataset provides detailed records of transit disruptions, including the location, cause, duration, and timing of each delay. The subway delay data spans from 2018 to 2024, while streetcar and bus delay records extend further, covering the period from 2014 to 2024. Subway and streetcar records were retrieved via the TTC’s API, while bus delay records and subway codes were downloaded as XLSX files and processed locally. The website is https://open.toronto.ca/dataset/ttc-subway-delay-data/, https://open.toronto.ca/dataset/ttc-streetcar-delay-data/, and https://open.toronto.ca/dataset/ttc-bus-delay-data/.
+
+Despite originating from the same transit agency, the three datasets were not standardized and required substantial preprocessing to enable cross-mode comparisons. One of the first challenges addressed was unifying date and time formats, as they were stored separately across datasets. The individual Date and Time fields were merged into a single DateTime object to create a consistent timestamp format across all records.
+
+Another key inconsistency was naming conventions for categorical variables. The subway dataset originally used column names such as "Delay Code," "Station," and "Route," which were renamed to "Incident," "Location," and "Route," respectively, to match the terminology used in the bus and streetcar datasets. The "Incident" variable represents the cause of the delay, such as mechanical failures, investigations, or signal issues. Additionally, the streetcar and bus datasets recorded delay durations using two separate fields, "Delay" and "Gap," whereas the subway dataset only had "Min Delay." To ensure uniformity, these fields were standardized as "Min Delay" and "Min Gap." Lastly, the incident code for the subway data in converted to the incident reason using the provided code book.
+
+Once standardized, the dataset was refined to focus on key variables relevant to the study:
+
+- **Day** – The day of the week when the delay occurred.
+
+- **Location** – The station, stop, or area where the delay took place.
+
+- **Incident** – The reported cause of the delay.
+
+- **Min Delay** – The duration of the delay in minutes.
+
+- **Min Gap** – The gap in minutes between vehicles due to the delay.
+
+- **DateTime** – The timestamp of the event, combining date and time into a single field.
+
+- **Route** – The affected transit route.
+
+- **Source** – The mode of transportation (Bus, Subway, or Streetcar).
+
+All records with missing values in any variable were removed due to the large dataset size. Additionally, any records with non-positive values in Min Delay or Min Gap were filtered out, ensuring that only valid transit delay data is retained for analysis. The final dataset consists of 400845 rows, with 207014 bus delay records, 139007 streetcar delay records, and 54824 subway delay records.
+
+```{r}
+transit_data1 <- data.frame(
+  Source = c("Bus", "Streetcar", "Subway"),
+  Count = c(207014, 139007, 54824)
+)
+
+
+transit_data1$Percentage <- transit_data1$Count / sum(transit_data1$Count) * 100
+
+ggplot(transit_data1, aes(x = "", y = Percentage, fill = Source)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() + 
+  labs(title = "Percentage of Data by Transit Mode") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5))
+```
+
+#### Tools Used 
+
+Data exploration and preprocessing were conducted using R in an RMarkdown environment. The dplyr package was used for data manipulation, filtering, and summarization, while tidyr helped handle missing values and reshape the dataset. readr and readxl were used to import data from CSV and Excel files, respectively, and lubridate was applied to standardize date-time formats. To inspect the dataset structure, basic functions such as str(), summary(), and colSums(is.na()) were used.
+
+# Preliminary Results
+
+### Basic Delay Statistics
+
+Transit delays vary significantly across different modes of transportation, as shown in the summary statistics and visualizations below. The overall average delay is 16.77 minutes, but each mode exhibits distinct patterns due to operational differences. Buses are the least reliable, with frequent and prolonged delays, while streetcars fall in between, experiencing moderate but sometimes severe disruptions. Subways remain the most consistent, with short and infrequent delays. 
+
+
+
+```{r}
+transit_data <- transit_data %>%
+  mutate(Delay_Category = case_when(
+    `Min Delay` > 0 & `Min Delay` <= 5 ~ "0-5",
+    `Min Delay` > 5 & `Min Delay` <= 10 ~ "5-10",
+    `Min Delay` > 10 & `Min Delay` <= 20 ~ "10-20",
+    `Min Delay` > 20 & `Min Delay` <= 30 ~ "20-30",
+    `Min Delay` > 30 & `Min Delay` <= 60 ~ "30-60",
+    `Min Delay` > 60 ~ "60+"
+  ))
+
+
+summary_table <- transit_data %>%
+  group_by(Source) %>%
+  summarise(
+    Min_Delay = min(`Min Delay`, na.rm = TRUE),
+    Max_Delay = max(`Min Delay`, na.rm = TRUE),
+    Avg_Delay = round(mean(`Min Delay`, na.rm = TRUE), 2)
+  ) %>%
+  bind_rows(
+    transit_data %>%
+      summarise(
+        Source = "Overall",
+        Min_Delay = min(`Min Delay`, na.rm = TRUE),
+        Max_Delay = max(`Min Delay`, na.rm = TRUE),
+        Avg_Delay = round(mean(`Min Delay`, na.rm = TRUE), 2)
+      )
+  )
+
+
+summary_table %>%
+  kable("html", caption = "Summary Statistics for Transit Delays") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
+
+
+delay_percentage <- transit_data %>%
+  group_by(Source, Delay_Category) %>%
+  summarise(Count = n(), .groups = 'drop') %>%
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%
+  mutate(Delay_Category = factor(Delay_Category, levels = c(
+ "0-5", "5-10", "10-20", "20-30", "30-60", "60+"
+  )))
+
+```
+
+Since there are many extreme delay cases, the delay times have been categorized to simplify the analysis. To better reflect their impact on daily activities, any delay exceeding 60 minutes is grouped together. This category covers delays ranging from 60 minutes to over 1,000 minutes. Most of these extreme delay were caused by Diversion, where the transit's route was changed so that station was never reached.
+
+- Buses experience the longest and most unpredictable delays, averaging 20.79 minutes, with some extreme cases reaching 1244 minutes. Short delays of 5-10 minutes account for 20.4% of all bus delays, but severe disruptions exceeding 30 minutes are common.
+
+- Streetcars have a lower average delay of 14.43 minutes, with most delays clustering in the 5-10 minute (16%) and 10-20 minute (9.6%) ranges. While extreme delays over an hour are rare, they still occur.
+
+- Subways are the most reliable mode, averaging just 7.48 minutes of delay. Most subway delays are short (0-5 min: 8.8%, 5-10 min: 3.1%), and severe disruptions are almost nonexistent. 
+
+### Comparison of Delay Distributions by Transit Mode
+
+
+The causes of transit delays vary significantly depending on the mode of transportation.
+
+- Buses frequently experience service disruptions due to mechanical failures and operator-related delays, making them highly unpredictable. Traffic congestion, route diversions, and collisions further contribute to delays, as buses operate in mixed traffic and are vulnerable to road conditions. Security-related incidents and emergency service responses also impact service, adding to the instability of bus schedules.
+
+- Streetcars, while also affected by mechanical issues, face additional challenges due to their reliance on fixed tracks. A common cause of delay occurs when a streetcar is unable to proceed because of another vehicle or obstruction ahead. Unlike buses, streetcars cannot simply reroute, making them more susceptible to disruptions caused by investigations, late departures, or diversions due to track blockages. These challenges make streetcars more dependent on efficient route management and infrastructure maintenance.
+
+- Subways experience fewer mechanical issues but are more affected by passenger-related disruptions. Disorderly riders, emergency alarms, and medical incidents frequently lead to stoppages, slowing down service. In addition to passenger-related delays, operational constraints such as automated train control upgrades and track intrusions require intervention, further affecting subway reliability.
+
+
+
+```{r}
+ggplot(delay_percentage, aes(x = Delay_Category, y = Percentage, fill = Delay_Category)) +
+  geom_col(show.legend = FALSE) +
+  scale_fill_viridis_d(option = "C") +
+  theme_minimal() +
+  labs( title = "Distribution of Delays by Duration",
+       x = "Delay Duration (minutes)", y = "Percentage (%)") +
+  theme(axis.text.x = element_text(size=7))
+
+
+
+```
+
+
+The following world clouds show the top 20 most frequent delay reason for each transit type.
+
+```{r}
+
+library(ggplot2)
+library(ggwordcloud)
+library(dplyr)
+library(patchwork)
+
+generate_wordcloud <- function(mode, title) {
+  mode_data <- transit_data %>%
+    filter(Source == mode) %>%
+    count(Incident) %>%
+    arrange(desc(n)) %>%
+    slice_max(n, n = 20)
+
+  ggplot(mode_data, aes(label = Incident, size = n)) +
+    geom_text_wordcloud(area_corr = TRUE, rm_outside = TRUE) + 
+    scale_size_area(max_size = 20) + 
+    theme_minimal() +
+    ggtitle(title)
+}
+
+wordcloud_bus <- generate_wordcloud("Bus", "Top 20 Bus Delay Reasons")
+wordcloud_streetcar <- generate_wordcloud("Streetcar", "Top 20 Streetcar Delay Reasons")
+wordcloud_subway <- generate_wordcloud("Subway", "Top 20 Subway Delay Reasons")
+
+# Combine plots with better layout
+combined_plot <- wordcloud_bus / wordcloud_streetcar / wordcloud_subway  # Stack vertically
+
+
+
+combined_plot
+```
+
+Unlike common assumptions that weather is the primary cause of transit delays, this chart shows that most delays is overall from mechanical issues and operational factors. "Mechanical" failures dominate as the leading cause, followed by "Operations - Operator," indicating that human or system-level operational issues play a significant role. Other frequent causes, such as "General Delay," "Utilized Off Route," and "Investigation," further suggest that delays are often due to internal transit system inefficiencies rather than external uncontrollable factors like weather. While security incidents and emergency services contribute, they are far less common than mechanical and operational disruptions.
+
+```{r}
+
+top_incidents <- transit_data %>%
+  count(Incident, sort = TRUE) %>%
+  slice_max(n, n = 10) 
+
+ggplot(top_incidents, aes(x = reorder(Incident, n), y = n, fill = Incident)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = "Top 10 Most Frequent Delay Incidents",
+       x = "Incident Type",
+       y = "Count") +
+  theme_minimal()
+
+
+```
+
+This boxplot shows the distribution of delays for different incident types. Diversions cause the longest and most variable delays, often exceeding 1,000 minutes.Most other incidents, like General Delay, Mechanical, and Security issues, have much shorter and more consistent delays. The red dots represent outliers, showing that some incidents occasionally result in extreme delays. Overall, operational disruptions such as diversions and emergency services lead to much greater delay variability than mechanical failures.
+
+```{r}
+ggplot(transit_data %>% filter(Incident %in% top_incidents$Incident), 
+       aes(x = reorder(Incident, `Min Delay`), y = `Min Delay`, fill = Incident)) +
+  geom_boxplot(outlier.color = "red", outlier.shape = 16) +
+  coord_flip() +
+  labs(title = "Distribution of Delays by Incident Type",
+       x = "Incident Type",
+       y = "Delay (minutes)") +
+  theme_minimal()
+
+```
+
+
+##### Conclusion
+
+Each transit mode faces unique challenges: buses struggle with mechanical failures and road conditions, streetcars are constrained by track-related disruptions, and subways are most impacted by passenger behavior and operational limitations. 
+
+
+### Delay Pattern
+
+```{r}
+transit_data <- transit_data %>%
+  mutate(
+    Is_Weekend = ifelse(Day %in% c("Saturday", "Sunday"), "Weekend", "Weekday"),
+    Hour = hour(DateTime) 
+  )
+
+transit_data_2018_2024 <- transit_data %>%
+  filter(year(DateTime) >= 2018 & year(DateTime) <= 2024)
+```
+
+#### Weekday vs. Weekend
+
+
+
+```{r}
+transit_weekday <- transit_data_2018_2024 %>%
+  filter(Is_Weekend == "Weekday") 
+
+
+transit_weekend <- transit_data_2018_2024 %>%
+  filter(Is_Weekend == "Weekend") 
+
+
+
+
+p1<-ggplot(transit_weekday %>% filter(`Min Delay` <= 75) %>%
+         group_by(`Min Delay`, Source) %>%
+         summarise(Count = n(), .groups = "drop"), 
+       aes(x = `Min Delay`, y = Count, color = Source)) +
+  geom_line(size = 1) +
+  labs(title = "Delays (≤ 75 min): Weekdays", 
+       x = "Delay (minutes)", y = "Count") +
+  scale_color_manual(values = c("Subway" = "steelblue", "Bus" = "tomato", "Streetcar" = "darkgreen")) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+p2<-ggplot(transit_weekday %>% filter(`Min Delay` > 75) %>%
+         group_by(`Min Delay`, Source) %>%
+         summarise(Count = n(), .groups = "drop"), 
+       aes(x = `Min Delay`, y = Count, color = Source)) +
+  geom_line(size = 1) +
+  labs(title = "Extreme Delays (> 75 min): Weekdays", 
+       x = "Delay (minutes)", y = "Count") +
+  scale_color_manual(values = c("Subway" = "steelblue", "Bus" = "tomato", "Streetcar" = "darkgreen")) +
+  theme_minimal() +
+  xlim(75, max(transit_weekday$`Min Delay`, na.rm = TRUE)) +
+  theme(legend.position = "none")
+
+p3<-ggplot(transit_weekend %>% filter(`Min Delay` <= 75) %>%
+         group_by(`Min Delay`, Source) %>%
+         summarise(Count = n(), .groups = "drop"), 
+       aes(x = `Min Delay`, y = Count, color = Source)) +
+  geom_line(size = 1) +
+  labs(title = "Delays (≤ 75 min): Weekends", 
+       x = "Delay (minutes)", y = "Count") +
+  scale_color_manual(values = c("Subway" = "steelblue", "Bus" = "tomato", "Streetcar" = "darkgreen")) +
+  theme_minimal() 
+
+p4<-ggplot(transit_weekend %>% filter(`Min Delay` > 75) %>%
+         group_by(`Min Delay`, Source) %>%
+         summarise(Count = n(), .groups = "drop"), 
+       aes(x = `Min Delay`, y = Count, color = Source)) +
+  geom_line(size = 1) +
+  labs(title = "Extreme Delays (> 75 min): Weekends", 
+       x = "Delay (minutes)", y = "Count") +
+  scale_color_manual(values = c("Subway" = "steelblue", "Bus" = "tomato", "Streetcar" = "darkgreen")) +
+  theme_minimal() +
+  xlim(75, max(transit_weekend$`Min Delay`, na.rm = TRUE))
+
+
+grid.arrange(p1, p3, p2, p4, nrow = 2, ncol = 2, widths = c(7, 8),  heights = c(3, 3))
+```
+
+
+The four line charts compare transit delays across buses, streetcars, and subways, distinguishing between short delays (≤75 minutes) and extreme delays (>75 minutes) during weekdays and weekends. The top row focuses on short delays, while the bottom row examines extreme delays.
+
+On weekdays, buses experience the highest frequency of short delays, with peaks at 10, 20, and 30 minutes, likely due to traffic congestion and scheduled timing adjustments. Streetcar delays are less frequent and mostly range between 0 and 10 minutes. Subway delays remain minimal, typically staying under 10 minutes. On weekends, short delays slightly decrease across all transit modes, though buses still dominate, likely due to reduced traffic and lower ridership. Streetcar and subway delays follow similar distributions, with subways continuing to show the least disruption.
+
+For extreme delays, buses again show the highest frequency on weekdays across a wide range of durations. Streetcar delays drop sharply after 250 minutes, while subway extreme delays remain rare. The weekend pattern remains similar, with buses and streetcars experiencing long delays, though with lower overall frequencies.
+
+##### Conclusion
+
+Weekday delays are more frequent across all transit modes, but the overall pattern remains consistent. Buses are the most delay-prone, followed by streetcars, while subways are the most reliable, consistently experiencing the fewest delays in all cases. 
+
+
+#### Hour of the Day 
+
+The resulting line plot illustrates the average delay by hour of the day for buses, streetcars, and subways after removing outliers. The removal process primarily filtered out extreme cases, such as route diversions where normal operations were significantly altered.
+
+The plot reveals similiar patterns across different transit modes. Bus delays show the highest variation, peaking sharply around 3–4 AM, followed by a steep decline at 5–6 AM before stabilizing throughout the day. This suggests that early morning delays may be influenced by overnight operations, late-night service changes, or early morning maintenance activities. A gradual increase in bus delays is also observed in the evening, likely due to increasing traffic congestion and higher ridership demand.
+
+Streetcar delays remain relatively stable compared to buses, but there is a noticeable dip in delays between 5–6 AM, similar to buses. Throughout the day, streetcar delays remain higher than subways but do not exhibit the same extreme fluctuations. This could be attributed to streetcars sharing road space with general traffic while still operating on fixed routes, making them less susceptible to sudden delay spikes.
+
+Subways show the most consistent and minimal delays throughout the day, with a slight decline in early morning hours and a steady trend afterward. Their reliability compared to surface transit modes suggests that subway operations are less affected by external traffic conditions.
+
+```{r}
+
+
+transit_data_filtered <- transit_data %>%
+  group_by(Source) %>% 
+  mutate(Q1 = quantile(`Min Delay`, 0.25, na.rm = TRUE),
+         Q3 = quantile(`Min Delay`, 0.75, na.rm = TRUE),
+         IQR = Q3 - Q1,
+         Lower_Bound = Q1 - 1.5 * IQR,
+         Upper_Bound = Q3 + 1.5 * IQR) %>%
+  filter(`Min Delay` >= Lower_Bound & `Min Delay` <= Upper_Bound) %>%
+  ungroup()
+
+hourly_delays <- transit_data_filtered %>%
+  group_by(Hour, Source) %>%
+  summarise(Average_Delay = mean(`Min Delay`, na.rm = TRUE), .groups = "drop")
+
+
+ggplot(hourly_delays, aes(x = Hour, y = Average_Delay, color = Source, group = Source)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Average Delay by Hour of the Day", 
+       x = "Hour of the Day", 
+       y = "Average Delay (minutes)",
+       color = "Transit Mode") +
+  scale_x_continuous(breaks = seq(0, 23, 1)) +  
+  scale_color_manual(values = c("Subway" = "steelblue", "Bus" = "tomato", "Streetcar" = "darkgreen")) +
+  theme_minimal()
+```
+
+The heatmap further confirms the delay patterns, showing that subways experience the least delays, represented by consistent green shades, while streetcars have moderate delays with more orange tones. Buses face the highest delays, especially during early morning hours, where deep red highlights severe disruptions around 3–5 AM before stabilizing later in the day. This visualization reinforces that subways are the most reliable, streetcars maintain steady but moderate delays, and buses experience significant fluctuations, particularly overnight.
+
+```{r}
+ggplot(hourly_delays, aes(x = Hour, y = Source, fill = Average_Delay)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "lightgreen", high = "darkred", name = "Avg Delay (min)") +
+  labs(title = "Heatmap of Average Transit Delays by Hour",
+       x = "Hour of the Day",
+       y = "Transit Mode") +
+  theme_minimal()
+
+
+```
+
+# Summary
+
+Transit delays in Toronto follow distinct patterns based on the mode of transportation, time of day, and cause of disruption. In short, taking the subway is the best option whenever possible. It not only has the shortest average delay but is also the most reliable and stable mode of transit.
+
+Weekday delays are generally more frequent, with peaks occurring during early morning and late-night hours. However, these times do not significantly impact most commuters, as they fall outside of regular travel periods. The most common cause of transit delays across all modes is mechanical failure, which affects buses the most due to their reliance on road conditions and frequent service interruptions. Streetcars experience delays primarily due to track obstructions and diversions, while subway delays are often linked to passenger-related incidents and operational constraints. Most of these delay factors are beyond passengers’ control, meaning there is little that individuals can do to avoid disruptions. However, understanding these patterns can help commuters make informed travel decisions, such as opting for the subway when reliability is a priority.
+
+## Futher Steps
+
+To build upon the findings of this study, the next phase of the project will focus on predictive modeling, time series analysis, and clustering techniques to uncover deeper insights into transit delays.
+
+Time series analysis will identify trends and patterns in transit delays over time. ARIMA or SARIMA models will help detect cyclical patterns, seasonal variations, and long-term shifts in reliability. Segmenting by transit mode will show whether delays have improved or worsened in recent years. Seasonal trends may help the TTC adjust schedules and allocate more resources during peak delay periods. Lag correlation analysis will explore whether a delay at one time increases the chance of future delays. If delays persist over time, this could indicate system-wide disruptions rather than isolated issues. Understanding these patterns can help transit planners prevent cascading delays and improve recovery strategies.
+
+Predictive Modeling will be implemented to forecast transit delays using historical data. Machine learning techniques, including Random Forest and simpler statistical models, will be used to predict delay severity based on factors such as transit mode, time of day, and past disruption trends. The goal is to develop a predictive framework that transit authorities can use to anticipate service interruptions and adjust operations proactively. A well-tuned predictive model could help mitigate delays by enabling early interventions, such as rerouting buses or adjusting service frequencies in response to expected disruptions.
+
+Clustering Analysis will be applied to categorize transit delays into meaningful groups. Using unsupervised learning methods such as K-means or hierarchical clustering, delays will be grouped based on characteristics like duration, cause, and time of occurrence. This process will be challenging due to the lack of precise location data, as only station names are available rather than geographic coordinates. However, despite this limitation, clustering analysis is valuable for identifying common delay patterns and understanding which types of disruptions occur most frequently. Dimensionality reduction techniques like PCA may be used to enhance clustering performance and highlight key features that influence delay variations.
+
+By integrating these approaches, this study aims to provide a more comprehensive understanding of transit delays, offering data-driven insights that could improve scheduling strategies, operational efficiency, and overall service reliability in Toronto’s transit system.

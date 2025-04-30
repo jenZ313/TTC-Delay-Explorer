@@ -1,13 +1,12 @@
 ---
-title: "Overview"
-output: 
+title: "Interactive Plots"
+output:
   html_document:
-    toc: TRUE
-    toc_float: TRUE
+    toc: true
+    toc_float: true
 ---
 
-
-Welcome to TTC Delay Explorer, a data visualization project for JSC370 that investigates patterns in Toronto’s public transit delays. This dashboard presents interactive plots built using data from the Toronto Transit Commission (TTC) between 2014 and 2024.
+This dashboard presents interactive plots built using data from the Toronto Transit Commission (TTC) between 2014 and 2024.
 
 Each figure highlights a different perspective of delay behavior—by mode, by time, by cause—making it easier to uncover what slows the city down. You can interact with each plot by hovering, zooming, or using dropdown menus where available.
 
