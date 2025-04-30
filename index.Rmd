@@ -17,6 +17,31 @@
    message = FALSE,
    warning = FALSE
  )
+library(tidyverse)
+library(widgetframe)
+library(tidytext)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(scales)
+library(lubridate)
+library(forcats)
+
+# INITALIZE CODE CHUNK OPTIONS
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  eval=TRUE,
+  echo = TRUE,
+  cache = FALSE,
+  fig.width = 7, 
+  fig.align = 'center',
+  fig.asp = 0.618,
+  out.width = "700px",
+  class.source = "code-r")
+delays_cleaned <- read_csv("data/transit_data_cleaned.csv") %>%
+  mutate(
+    DateTime  = with_tz(force_tz(DateTime, "UTC"), "America/Toronto"))
 ```
 
  Welcome to the TTC Delay Explorer, a data storytelling project created for JSC370 at the University of Toronto.  
@@ -25,10 +50,9 @@
 
  This site contains four main sections:
  
- - **Overview** (this page): Project introduction, background, and data summary  
+ - **Overview** (this page): Project introduction, background, interative plots and data summary 
  - **Midterm EDA**: Initial exploratory data analysis and visual insights  
  - **Final Report**: Modeling results, key findings, and conclusions  
- - **Interactive Plots**: Fully dynamic charts for further exploration
 
  Use the navigation bar at the top to explore the sections.
 
@@ -43,9 +67,198 @@
  - Which transit modes are most affected?  
  - What are the most common delay causes?  
  - Can we predict future delays using past records or external events?
+ 
+# Interactive Plots
 
 
- Understanding transit delay patterns can improve public service delivery, reduce commuter stress, and help prioritize operational changes. This project provides insight into the dynamics of transit delays in Toronto through both statistical analysis and engaging visualizations. To dive into the analysis, visit the **Midterm EDA** for an overview of delay patterns, the **Final Report** for modeling results, or the **Interactive Plots** page to explore the data dynamically.
+```{r plots , message=FALSE, echo=FALSE, warning=FALSE}
+
+
+daily_mode_avg <- delays_cleaned %>%
+  mutate(date = as.Date(DateTime)) %>%
+  group_by(date, Source) %>%
+  summarise(avg_delay = mean(`Min Delay`, na.rm = TRUE), .groups = 'drop')
+
+
+p1 <- ggplot(daily_mode_avg, aes(x = date, y = avg_delay, color = Source)) +
+  geom_line(size = 1) +
+  scale_color_brewer(palette = "Set1") +
+  scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") +
+  labs(
+    title = "Average Daily Delay by Transit Mode",
+    subtitle = "Toronto Transit Commission (2014–2024)",
+    x = "Date",
+    y = "Average Delay (minutes)",
+    color = "Transit Mode"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.text.x = element_text(size = 6, angle = 45, hjust = 1),
+    legend.position = "bottom"
+  )
+
+p1 <- ggplotly(p1, tooltip = c("date", "avg_delay", "Source"))
+
+
+heatmap_data <- delays_cleaned %>%
+  mutate(
+    day = wday(DateTime, label = TRUE, abbr = FALSE),
+    hour = hour(DateTime)
+  ) %>%
+  group_by(day, hour) %>%
+  summarise(avg_delay = mean(`Min Delay`, na.rm = TRUE), .groups = 'drop')
+
+p2 <- plot_ly(
+  data = heatmap_data,
+  x = ~hour,
+  y = ~day,
+  z = ~avg_delay,
+  type = "heatmap",
+  colors = colorRamp(c("green4", "red4")),
+  hovertemplate = paste(
+    "Day: %{y}<br>",
+    "Hour: %{x}:00<br>",
+    "Avg Delay: %{z:.2f} min<extra></extra>"
+  )
+) %>%
+  layout(
+    title = "Average TTC Delay by Day and Hour",
+    xaxis = list(title = "Hour of Day"),
+    yaxis = list(title = "Day of Week")
+  )
+
+
+treemap_data <- delays_cleaned %>%
+  group_by(Incident) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+
+p3 <- plot_ly(
+  type = "treemap",
+  labels = treemap_data$Incident,
+  parents = rep("", nrow(treemap_data)),
+  values = treemap_data$count,
+  textinfo = "label+value+percent entry"
+) %>%
+  layout(title = "Treemap of Delay Causes")
+
+top_incidents <- delays_cleaned %>%
+  count(Incident, sort = TRUE) %>%
+  top_n(30, n) %>%
+  pull(Incident)
+
+plot_data <- delays_cleaned %>%
+  mutate(Incident_grouped = if_else(Incident %in% top_incidents, Incident, "Other")) %>%
+  group_by(Source, Incident_grouped) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  mutate(Incident_grouped = fct_reorder(Incident_grouped, count))
+
+transit_modes <- unique(plot_data$Source)
+
+traces <- list()
+
+for (i in seq_along(transit_modes)) {
+  mode <- transit_modes[i]
+  mode_data <- filter(plot_data, Source == mode)
+  
+  trace <- list(
+    x = mode_data$count,
+    y = mode_data$Incident_grouped,
+    type = 'bar',
+    orientation = 'h',
+    name = mode,
+    visible = ifelse(i == 1, TRUE, FALSE)
+  )
+  
+  traces <- append(traces, list(trace))
+}
+
+buttons <- lapply(seq_along(transit_modes), function(i) {
+  mode_visibility <- rep(FALSE, length(transit_modes))
+  mode_visibility[i] <- TRUE
+  
+  list(
+    method = "update",
+    args = list(list(visible = mode_visibility),
+                list(title = paste("Top 30 Delay Causes -", transit_modes[i]))),
+    label = transit_modes[i]
+  )
+})
+
+fig <- plot_ly()
+
+for (trace in traces) {
+  fig <- fig %>% add_trace(
+    x = trace$x,
+    y = trace$y,
+    type = trace$type,
+    orientation = trace$orientation,
+    name = trace$name,
+    visible = trace$visible
+  )
+}
+
+p4 <- fig %>% layout(
+  title = paste("Top 30 Delay Causes -", transit_modes[1]),
+  xaxis = list(title = "Number of Delays"),
+  yaxis = list(title = "Delay Cause"),
+  updatemenus = list(
+    list(
+      active = 0,
+      buttons = buttons,
+      x = 1.1,
+      y = 0.5
+    )
+  )
+)
+
+
+```
+
+## Interactive Visualizations {.tabset}
+
+### Delay Trends Over Time
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+p1
+```
+
+This plot shows the average daily delay over time for buses, streetcars, and subways. Streetcars tend to have the most variable and highest delays, while subway delays are the most stable and lowest. Bus delays fluctuate significantly, with occasional spikes. Users can hover to explore specific dates and toggle transit modes on and off for clearer comparisons.
+
+
+
+
+### Weekly Heatmap of Delays
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+p2
+```
+
+This is a heatmap displaying the average delay by day of the week and hour of the day. Delays tend to peak late at night and early in the morning, especially on weekends. Most weekday daytime hours experience moderate and stable delay levels. Hovering over any square reveals the exact delay for that time block.
+
+
+### Delay Causes Treemap
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+p3
+```
+
+This is a treemap that visualizes the frequency of different delay causes across all modes. Mechanical issues are the most common, followed by operator-related problems and general delays. Each box is sized by how often the cause occurs, and users can hover to see detailed counts and percentages.
+
+### Top 30 Delay Causes by Type
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+p4
+```
+
+These figures show the top 30 delay causes for each transit mode. Mechanical issues are the most common across buses and streetcars, while subway delays include many categorized as “Other,” along with passenger-related and door problems. While all modes share some similar causes, streetcars show more variation, and subways appear to have more complex or less well-defined incident records. Use the drop down menu to switch between transit types.
+
+
+
+ Understanding transit delay patterns can improve public service delivery, reduce commuter stress, and help prioritize operational changes. This project provides insight into the dynamics of transit delays in Toronto through both statistical analysis and engaging visualizations. To dive into the analysis, visit the **Midterm EDA** for an overview of delay patterns, and the **Final Report** for modeling results.
+ 
+
  
 <div style="text-align: center; margin-top: 20px;">
   <a href="report.pdf" download class="btn btn-sm btn-outline-info">Download Full PDF Report</a>
@@ -54,5 +267,4 @@
  <p style="text-align: center; margin-top: 30px;">
    <a href="midterm.html" class="btn btn-sm btn-outline-primary">Go to Midterm EDA</a>
    <a href="final_report.html" class="btn btn-sm btn-outline-secondary" style="margin-left: 10px;">Final Report</a>
-   <a href="interactive_plots.html" class="btn btn-sm btn-outline-success" style="margin-left: 10px;">Interactive Plots</a>
  </p>
