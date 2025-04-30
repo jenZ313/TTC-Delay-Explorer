@@ -156,7 +156,7 @@ buttons <- lapply(seq_along(transit_modes), function(i) {
   list(
     method = "update",
     args = list(list(visible = mode_visibility),
-                list(title = paste("Top 20 Delay Causes -", transit_modes[i]))),
+                list(title = paste("Top 30 Delay Causes -", transit_modes[i]))),
     label = transit_modes[i]
   )
 })
