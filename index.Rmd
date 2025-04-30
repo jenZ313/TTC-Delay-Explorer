@@ -17,9 +17,14 @@ knitr::opts_chunk$set(
 )
 
 library(tidyverse)
-library(plotly)
 library(widgetframe)
 library(tidytext)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(scales)
+library(lubridate)
+library(forcats)
 
 # INITALIZE CODE CHUNK OPTIONS
 knitr::opts_chunk$set(
@@ -40,12 +45,7 @@ delays_cleaned <- read_csv("data/transit_data_cleaned.csv") %>%
 
 
 ```{r plots , message=FALSE, echo=FALSE, warning=FALSE}
-library(dplyr)
-library(ggplot2)
-library(plotly)
-library(scales)
-library(lubridate)
-library(forcats)
+
 
 
 
