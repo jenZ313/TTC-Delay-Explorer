@@ -1,10 +1,16 @@
-name: "my-website"
+name: "ttc-delay-explorer"
 output_dir: "."
 navbar:
   title: "JSC370 Final Project"
   left:
-    - text: "Home"
+    - text: "Overview"
       href: index.html
+    - text: "Midterm EDA"
+      href: midterm.html
+    - text: "Final Report"
+      href: report.html
+    - text: "Interactive Plots"
+      href: interactive_plots.html
   right:
     - icon: fa-github fa-lg
       href: https://github.com/JSC370/JSC370-2025/
