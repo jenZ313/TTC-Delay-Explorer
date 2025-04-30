@@ -53,6 +53,10 @@ delays_cleaned <- read_csv("data/transit_data_cleaned.csv") %>%
  - **Overview** (this page): Project introduction, background, interative plots and data summary 
  - **Midterm EDA**: Initial exploratory data analysis and visual insights  
  - **Final Report**: Modeling results, key findings, and conclusions  
+ 
+ <div style="text-align: center; margin-top: 20px;">
+  <a href="report.pdf" download class="btn btn-sm btn-outline-info">Download Full PDF Report</a>
+</div>
 
  Use the navigation bar at the top to explore the sections.
 
@@ -261,9 +265,7 @@ These figures show the top 30 delay causes for each transit mode. Mechanical iss
  
 
  
-<div style="text-align: center; margin-top: 20px;">
-  <a href="report.pdf" download class="btn btn-sm btn-outline-info">Download Full PDF Report</a>
-</div>
+
 
  <p style="text-align: center; margin-top: 30px;">
    <a href="midterm.html" class="btn btn-sm btn-outline-primary">Go to Midterm EDA</a>
