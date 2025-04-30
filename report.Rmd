@@ -1,11 +1,10 @@
 ---
 title: "Forecasting Transit Delays in Toronto"
 output:
+  pdf_document: default
   html_document:
     toc: true
     toc_float: true
-  pdf_document:
-    toc: true
 ---
 
 ```{r setup, include=FALSE, warning=FALSE, message=FALSE}
@@ -279,6 +278,60 @@ Before analysis, the data required cleaning and standardization. Originally, eac
 
 This report used a cleaned csv file, but all results can be fully reproduced using the raw TTC delay data available online. The data/ folder contains the exact scripts used for data acquisition and cleaning in order to get the cleaned csv file.
 
+## EDA
+
+#### Hour of the Day 
+
+The plot shows average hourly delays for buses, streetcars, and subways after removing outliers such as severe disruptions. Buses exhibit the largest variability, with a sharp peak around 3–4 AM and a steady rise in the evening, likely reflecting overnight disruptions and evening congestion. Streetcar delays remain more stable but slightly elevated, reflecting their exposure to mixed traffic. Subway delays are the most consistent and lowest throughout the day, suggesting greater resilience to surface-level disruptions.
+
+```{r warning = FALSE, message = FALSE, fig.height=4, fig.width=6}
+
+transit_data_filtered <- transit_data %>%
+  mutate(Hour = hour(dt_local)) %>%
+  group_by(Source) %>% 
+  mutate(Q1 = quantile(min_delay, 0.25, na.rm = TRUE),
+         Q3 = quantile(min_delay, 0.75, na.rm = TRUE),
+         IQR = Q3 - Q1,
+         Lower_Bound = Q1 - 1.5 * IQR,
+         Upper_Bound = Q3 + 1.5 * IQR) %>%
+  filter(min_delay >= Lower_Bound & min_delay <= Upper_Bound) %>%
+  ungroup()
+
+hourly_delays <- transit_data_filtered %>%
+  group_by(Hour, Source) %>%
+  summarise(Average_Delay = mean(min_delay, na.rm = TRUE), .groups = "drop")
+
+
+ggplot(hourly_delays, aes(x = Hour, y = Average_Delay, color = Source, group = Source)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Average Delay by Hour of the Day", 
+       x = "Hour of the Day", 
+       y = "Average Delay (minutes)",
+       color = "Transit Mode") +
+  scale_x_continuous(breaks = seq(0, 23, 1)) +  
+  scale_color_manual(values = c("Subway" = "steelblue", "Bus" = "tomato", "Streetcar" = "darkgreen")) +
+  theme_minimal()
+```
+
+
+
+This heatmap illustrates average hourly delays by transit mode. Bus delays are consistently the highest, with delays intensifying into the evening. Streetcar delays remain moderate and relatively stable, while subway delays are the lowest and most uniform throughout the day. The gradient highlights how surface modes—particularly buses—are more affected by hourly fluctuations, likely due to road traffic and service frequency.
+
+```{r warning = FALSE, message = FALSE, fig.height=4, fig.width=6}
+ggplot(hourly_delays, aes(x = Hour, y = Source, fill = Average_Delay)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "lightgreen", high = "darkred", name = "Avg Delay (min)") +
+  labs(title = "Heatmap of Average Transit Delays by Hour",
+       x = "Hour of the Day",
+       y = "Transit Mode") +
+  theme_minimal()
+
+
+```
+
+
+
 ## Models
 
 This study aims to predict the average daily delay across Toronto's transit network. To calculate this, all delays for each day were summed and then divided by the number of delay events that day. Predictions used two kinds of information. First, historical delays from the day before ("lag-1") and from exactly one week ago ("lag-7") were included. These lagged delays help models understand if delays today might be similar to recent delays or follow a weekly pattern. Second, an indicator was used to mark a significant external event: the COVID-19 pandemic period. Days during the major COVID-19 stay-at-home orders (March 1, 2020, to June 30, 2022) were labeled "1", and all other days were labeled "0". This helps the models learn if delays were different during COVID compared to normal times. To fairly test the models, the last 14 days of data were reserved for evaluation, and all earlier data were used for training. The seed was set to 370 for reproducibility.
@@ -374,7 +427,7 @@ This model achieved the best performance out of all methods tested, with a RMSE 
 
 A variable importance analysis was also performed to understand which predictors contributed the most to the Random Forest's accuracy. The results are shown in the bar plot below. The plot displays the importance scores for each variable, where a higher score means the variable played a bigger role in making accurate predictions. The COVID-19 indicator was the most important predictor with a score around 15.5, showing that the pandemic had a strong influence on delays even after controlling for historical patterns. The previous day's delay (lag1) had an importance score around 6.9, and the delay from one week ago (lag7) had a score around 5.7. This means that while short-term and weekly history were important, the COVID period itself had a noticeable and lasting effect on daily delays.
 
-```{r fig.height=2, fig.width=6}
+```{r fig.height=3, fig.width=6}
 rf_plot
 ```
 
@@ -385,7 +438,7 @@ Taken together, these results paint a consistent picture. Every modelling framew
 The chart compares each model’s forecasts with the actual delays over the last two weeks. The green line is the real data. The grey baseline line, which simply repeats last week’s value, often sits well above the true delays, especially on the sharp dips. The two orange lines—plain ARIMA and ARIMAX—follow almost the same smooth path; they are closer to reality than the baseline but still miss the sudden drops. The blue GAM curve stays almost flat, matching the overall level yet overlooking the daily swings. The red Random Forest track stays nearest to the green line, moving up and down at the right moments and therefore gives the most accurate day-by-day predictions.
 
 
-```{r fig.height=3, fig.width=6}
+```{r fig.height=4, fig.width=6}
 p1
 ```
 
