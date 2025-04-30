@@ -10,6 +10,11 @@ output:
 This is my JSC370 final project website!
 
 ```{r setup, message=FALSE, echo=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  echo    = FALSE,   
+  message = FALSE,   
+  warning = FALSE    
+)
 
 library(tidyverse)
 library(plotly)
@@ -28,60 +33,190 @@ knitr::opts_chunk$set(
   fig.asp = 0.618,
   out.width = "700px",
   class.source = "code-r")
-
-source("/Users/wu/Desktop/jsc370/JSC370-labs/lab12/process_starbucks_data.R")
+delays_cleaned <- read_csv("data/transit_data_cleaned.csv") %>%
+  mutate(
+    DateTime  = with_tz(force_tz(DateTime, "UTC"), "America/Toronto"))
 ```
 
 
-```{r plot1, class.source="code-r-small", echo=FALSE}
+```{r plots , message=FALSE, echo=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(scales)
+library(lubridate)
+library(forcats)
 
-plot1 <- sb_nutr |>
-  unnest_tokens(word, Item, token = "words") |>
-  filter(word %in% topwords$word) |>
-  plot_ly(x = ~Calories, 
-          y = ~`Carb. (g)`, 
-          z = ~`Protein (g)`,
-          type = "scatter3d",
-          mode = "markers",
-          color = ~word)
+
+
+daily_mode_avg <- delays_cleaned %>%
+  mutate(date = as.Date(DateTime)) %>%
+  group_by(date, Source) %>%
+  summarise(avg_delay = mean(`Min Delay`, na.rm = TRUE), .groups = 'drop')
+
+
+p1 <- ggplot(daily_mode_avg, aes(x = date, y = avg_delay, color = Source)) +
+  geom_line(size = 1) +
+  scale_color_brewer(palette = "Set1") +
+  scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") +
+  labs(
+    title = "Average Daily Delay by Transit Mode",
+    subtitle = "Toronto Transit Commission (2014–2024)",
+    x = "Date",
+    y = "Average Delay (minutes)",
+    color = "Transit Mode"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.text.x = element_text(size = 6, angle = 45, hjust = 1),
+    legend.position = "bottom"
+  )
+
+p1 <- ggplotly(p1, tooltip = c("date", "avg_delay", "Source"))
+
+
+heatmap_data <- delays_cleaned %>%
+  mutate(
+    day = wday(DateTime, label = TRUE, abbr = FALSE),
+    hour = hour(DateTime)
+  ) %>%
+  group_by(day, hour) %>%
+  summarise(avg_delay = mean(`Min Delay`, na.rm = TRUE), .groups = 'drop')
+
+p2 <- plot_ly(
+  data = heatmap_data,
+  x = ~hour,
+  y = ~day,
+  z = ~avg_delay,
+  type = "heatmap",
+  colors = colorRamp(c("green4", "red4")),
+  hovertemplate = paste(
+    "Day: %{y}<br>",
+    "Hour: %{x}:00<br>",
+    "Avg Delay: %{z:.2f} min<extra></extra>"
+  )
+) %>%
+  layout(
+    title = "Average TTC Delay by Day and Hour",
+    xaxis = list(title = "Hour of Day"),
+    yaxis = list(title = "Day of Week")
+  )
+
+
+treemap_data <- delays_cleaned %>%
+  group_by(Incident) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+
+p3 <- plot_ly(
+  type = "treemap",
+  labels = treemap_data$Incident,
+  parents = rep("", nrow(treemap_data)),
+  values = treemap_data$count,
+  textinfo = "label+value+percent entry"
+) %>%
+  layout(title = "Treemap of Delay Causes")
+
+top_incidents <- delays_cleaned %>%
+  count(Incident, sort = TRUE) %>%
+  top_n(30, n) %>%
+  pull(Incident)
+
+plot_data <- delays_cleaned %>%
+  mutate(Incident_grouped = if_else(Incident %in% top_incidents, Incident, "Other")) %>%
+  group_by(Source, Incident_grouped) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  mutate(Incident_grouped = fct_reorder(Incident_grouped, count))
+
+transit_modes <- unique(plot_data$Source)
+
+traces <- list()
+
+for (i in seq_along(transit_modes)) {
+  mode <- transit_modes[i]
+  mode_data <- filter(plot_data, Source == mode)
+  
+  trace <- list(
+    x = mode_data$count,
+    y = mode_data$Incident_grouped,
+    type = 'bar',
+    orientation = 'h',
+    name = mode,
+    visible = ifelse(i == 1, TRUE, FALSE)
+  )
+  
+  traces <- append(traces, list(trace))
+}
+
+buttons <- lapply(seq_along(transit_modes), function(i) {
+  mode_visibility <- rep(FALSE, length(transit_modes))
+  mode_visibility[i] <- TRUE
+  
+  list(
+    method = "update",
+    args = list(list(visible = mode_visibility),
+                list(title = paste("Top 20 Delay Causes -", transit_modes[i]))),
+    label = transit_modes[i]
+  )
+})
+
+fig <- plot_ly()
+
+for (trace in traces) {
+  fig <- fig %>% add_trace(
+    x = trace$x,
+    y = trace$y,
+    type = trace$type,
+    orientation = trace$orientation,
+    name = trace$name,
+    visible = trace$visible
+  )
+}
+
+p4 <- fig %>% layout(
+  title = paste("Top 30 Delay Causes -", transit_modes[1]),
+  xaxis = list(title = "Number of Delays"),
+  yaxis = list(title = "Delay Cause"),
+  updatemenus = list(
+    list(
+      active = 0,
+      buttons = buttons,
+      x = 1.1,
+      y = 0.5
+    )
+  )
+)
+
 
 ```
-
-
-```{r plot2, class.source="code-r-small", echo=FALSE}
-
-plot2 <- sb_nutr |>
-  unnest_tokens(word, Item, token = "words") |>
-  filter(word %in% topwords$word) |>
-  plot_ly(x = ~word, type = 'box', name = "Items") |>
-  add_boxplot(y = ~`Calories`, name = "Calories") |>
-  add_boxplot(y = ~`Fat (g)`, name = "Fat (g)") |>
-  add_boxplot(y = ~`Carb. (g)`, name = "Carb. (g)") |>
-  add_boxplot(y = ~`Fiber (g)`, name = "Fiber (g)") |>
-  add_boxplot(y = ~`Protein (g)`, name = "Protein (g)") |>
-  layout(title="boxplot of all of the nutritional variables in groups by the 10 item words",
-         xaxis= list(title="Items"),
-         yaxis=list(title=""),
-         boxmode = "group"
-         )
-
-
-
-```
-
 
 ## Showcasing plots {.tabset}
 
 ### Figure 1
 
-```{r}
-plot1
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+p1
 ```
 
 ### Figure 2
 
-```{r}
-plot2
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+p2
 ```
+
+### Figure 3
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+p3
+```
+
+
+### Figure 4
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+p4
+```
+
 
 
