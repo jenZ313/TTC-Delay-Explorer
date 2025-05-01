@@ -2,9 +2,10 @@ My JSC370 Final Project Website
 
 This is my JSC370 Final Project website home. The website is online at [https://jenz313.github.io/JSC370-Project/](https://jenz313.github.io/JSC370-Project/).
 
-## 🎬 Final Presentation Video
+### Final Presentation Video
 [Download or view on GitHub](./FinalPresentation.mp4)
-[Watch on Google Drive](https://drive.google.com/file/d/1mh-4vVDxRuStieVEqAO37nox59I6Yp9q/view?usp=sharing)
+
+[Watch on Google Drive](https://drive. oogle.com/file/d/1mh-4vVDxRuStieVEqAO37nox59I6Yp9q/view?usp=sharing)
 
 
 Welcome to the TTC Delay Explorer, a data storytelling project created for JSC370 at the University of Toronto.  
