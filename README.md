@@ -3,7 +3,7 @@
 Welcome to the TTC Delay Explorer, a data storytelling project created for JSC370 at the University of Toronto.  
 
 ### Links
-The website is online at [https://jenz313.github.io/JSC370-Project/](https://jenz313.github.io/JSC370-Project/).
+The website is online at [[https://jenz313.github.io/JSC370-Project/]([https://jenz313.github.io/TTC-Delay-Explorer/](https://jenz313.github.io/TTC-Delay-Explorer/))](https://jenz313.github.io/JSC370-Project/).
 
 [Download or view Presentation Video on GitHub](./FinalPresentation.mp4)
 
