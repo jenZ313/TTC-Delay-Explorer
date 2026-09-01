@@ -269,5 +269,5 @@ These figures show the top 30 delay causes for each transit mode. Mechanical iss
 
  <p style="text-align: center; margin-top: 30px;">
    <a href="midterm.html" class="btn btn-sm btn-outline-primary">Go to Midterm EDA</a>
-   <a href="final_report.html" class="btn btn-sm btn-outline-secondary" style="margin-left: 10px;">Final Report</a>
+   <a href="report.html" class="btn btn-sm btn-outline-secondary" style="margin-left: 10px;">Final Report</a>
  </p>
